@@ -43,7 +43,7 @@ extern "C"
 	int jx_tz_wall_to_utc_ms(const char *iana_id, int y, int m, int d, int h, int mi, int s, int ms,
 							 int64_t *out_utc);
 
-	// Detect host local IANA id (static storage; never NULL — falls back to "UTC").
+	// Detect host local IANA id (static storage; never NULL - falls back to "UTC").
 	const char *jx_tz_detect_host(void);
 
 #ifdef __cplusplus

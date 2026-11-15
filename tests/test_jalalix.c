@@ -286,6 +286,75 @@ int main(void)
 	expect_int("golden noon tehran minutes", jalalix_get_minutes(j), 30);
 	jalalix_free(j);
 
+	// Arabic-Indic digits
+	if (jalalix_from_persian("١٤٠٣/١٢/٠٧", western, sizeof(western)) != 0)
+	{
+		fprintf(stderr, "FAIL from_persian arabic\n");
+		failed++;
+	}
+	else
+	{
+		expect_str("from_persian arabic", western, "1403/12/07");
+	}
+
+	p = jalalix_parse_jalali("1403.12.07");
+
+	if (!p)
+	{
+		fprintf(stderr, "FAIL parse_jalali dot NULL\n");
+		failed++;
+	}
+	else
+	{
+		jalalix_to_iso_date(p, buf, sizeof(buf), 0);
+		expect_str("parse_jalali dot", buf, "2025-02-25");
+		jalalix_free(p);
+	}
+
+	// normalizeQueryDate
+	{
+		jalalix_normalize_options utc = {0};
+		jalalix_normalize_options tehran = {0};
+		int rc;
+
+		utc.timezone = "UTC";
+		tehran.timezone = "Asia/Tehran";
+
+		rc = jalalix_normalize_query_date("null", NULL, buf, sizeof(buf));
+		expect_int("normalize sentinel null", rc, 1);
+		expect_str("normalize sentinel empty", buf, "");
+
+		rc = jalalix_normalize_query_date("undefined", NULL, buf, sizeof(buf));
+		expect_int("normalize sentinel undefined", rc, 1);
+
+		rc = jalalix_normalize_query_timestamp(1740430800LL, &utc, buf, sizeof(buf));
+		expect_int("normalize timestamp utc", rc, 0);
+		expect_str("normalize timestamp utc out", buf, "2025-02-24 21:00:00");
+
+		rc = jalalix_normalize_query_timestamp(1740430800000LL, &tehran, buf, sizeof(buf));
+		expect_int("normalize timestamp tehran", rc, 0);
+		expect_str("normalize timestamp tehran out", buf, "2025-02-25 00:30:00");
+
+		rc = jalalix_normalize_query_date("1403/12/07", &utc, buf, sizeof(buf));
+		expect_int("normalize jalali", rc, 0);
+		expect_str("normalize jalali out", buf, "2025-02-25 00:00:00");
+
+		rc = jalalix_normalize_query_date("۱۴۰۳-۱۲-۰۷ 14:30:00", &utc, buf, sizeof(buf));
+		expect_str("normalize jalali persian time", buf, "2025-02-25 14:30:00");
+
+		rc = jalalix_normalize_query_date("2025.02.25", NULL, buf, sizeof(buf));
+		expect_str("normalize gregorian dot", buf, "2025-02-25 00:00:00");
+
+		rc = jalalix_normalize_query_date("2025-02-25 12:30:45.123Z", NULL, buf, sizeof(buf));
+		expect_str("normalize gregorian frac", buf, "2025-02-25 12:30:45");
+
+		rc = jalalix_normalize_query_date("not-a-date", NULL, buf, sizeof(buf));
+		expect_str("normalize junk", buf, "not-a-date");
+
+		rc = jalalix_normalize_query_date("2025-01-01", NULL, buf, sizeof(buf));
+		expect_str("normalize gregorian year", buf, "2025-01-01 00:00:00");
+	}
+
 	if (failed)
 	{
 		fprintf(stderr, "\n%d test(s) failed\n", failed);

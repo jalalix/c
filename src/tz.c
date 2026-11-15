@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
 #if defined(_WIN32)
 static int jx_strcasecmp(const char *a, const char *b)
 {
@@ -25,7 +26,7 @@ static int jx_strcasecmp(const char *a, const char *b)
 #endif
 
 #ifdef _WIN32
-// No /usr/share/zoneinfo on Windows — embedded only.
+// No /usr/share/zoneinfo on Windows - embedded only.
 #else
 #include <unistd.h>
 #endif
@@ -53,9 +54,10 @@ static int read_i32_be(const unsigned char *p, size_t len, size_t *off, int32_t 
 {
 	if (*off + 4 > len)
 		return -1;
-	*out = (int32_t)(((uint32_t)p[*off] << 24) | ((uint32_t)p[*off + 1] << 16) |
-					 ((uint32_t)p[*off + 2] << 8) | (uint32_t)p[*off + 3]);
+
+	*out = (int32_t)(((uint32_t)p[*off] << 24) | ((uint32_t)p[*off + 1] << 16) | ((uint32_t)p[*off + 2] << 8) | (uint32_t)p[*off + 3]);
 	*off += 4;
+
 	return 0;
 }
 
@@ -63,12 +65,16 @@ static int read_i64_be(const unsigned char *p, size_t len, size_t *off, int64_t 
 {
 	int i;
 	uint64_t v = 0;
+
 	if (*off + 8 > len)
 		return -1;
+
 	for (i = 0; i < 8; i++)
 		v = (v << 8) | p[*off + i];
+
 	*out = (int64_t)v;
 	*off += 8;
+
 	return 0;
 }
 
@@ -80,6 +86,7 @@ static int is_leap(int y)
 static int64_t days_from_civil(int y, int m, int d)
 {
 	y -= m <= 2;
+
 	{
 		const int64_t era = (y >= 0 ? y : y - 399) / 400;
 		const unsigned yoe = (unsigned)(y - era * 400);
@@ -114,6 +121,7 @@ static int parse_posix_offset(const char *s, int32_t *east_out, const char **res
 
 	if (!p || !*p)
 		return -1;
+
 	if (*p == '+')
 	{
 		sign = 1;
@@ -124,27 +132,37 @@ static int parse_posix_offset(const char *s, int32_t *east_out, const char **res
 		sign = -1;
 		p++;
 	}
+
 	if (!isdigit((unsigned char)*p))
 		return -1;
+
 	hours = 0;
+
 	while (isdigit((unsigned char)*p))
 		hours = hours * 10 + (*p++ - '0');
+
 	if (*p == ':')
 	{
 		p++;
+
 		while (isdigit((unsigned char)*p))
 			minutes = minutes * 10 + (*p++ - '0');
+
 		if (*p == ':')
 		{
 			p++;
+
 			while (isdigit((unsigned char)*p))
 				seconds = seconds * 10 + (*p++ - '0');
 		}
 	}
+
 	west = sign * (hours * 3600 + minutes * 60 + seconds);
 	*east_out = -west;
+
 	if (rest_out)
 		*rest_out = p;
+
 	return 0;
 }
 
@@ -152,22 +170,28 @@ static const char *skip_posix_abbr(const char *s)
 {
 	if (!s)
 		return NULL;
+
 	if (*s == '<')
 	{
 		const char *e = strchr(s, '>');
 		return e ? e + 1 : NULL;
 	}
+
 	while (*s && isalpha((unsigned char)*s))
 		s++;
+
 	return s;
 }
 
 static int parse_hhmmss(const char *s)
 {
 	int h = 0, m = 0, sec = 0;
+
 	if (!s || !*s)
 		return 2 * 3600;
+
 	sscanf(s, "%d:%d:%d", &h, &m, &sec);
+
 	return h * 3600 + m * 60 + sec;
 }
 
@@ -187,21 +211,27 @@ static int parse_m_rule_doy(int year, const char *rest)
 	dim = days_in_month[month - 1];
 	day1 = days_from_civil(year, month, 1);
 	day1_wday = (int)((day1 + 4) % 7);
+
 	if (day1_wday < 0)
 		day1_wday += 7;
+
 	first = 1 + ((d - day1_wday) % 7 + 7) % 7;
+
 	if (n == 5)
 	{
 		day = first;
+
 		while (day + 7 <= dim)
 			day += 7;
 	}
 	else
 	{
 		day = first + (n - 1) * 7;
+
 		if (day > dim)
 			return -1;
 	}
+
 	return (int)(days_from_civil(year, month, day) - days_from_civil(year, 1, 1));
 }
 
@@ -214,11 +244,14 @@ static int64_t rule_to_unix(int year, const char *rule, int32_t offset_before)
 	int64_t local_secs;
 
 	slash = strchr(rule, '/');
+
 	if (slash)
 	{
 		size_t n = (size_t)(slash - rule);
+
 		if (n >= sizeof(date_part))
 			n = sizeof(date_part) - 1;
+
 		memcpy(date_part, rule, n);
 		date_part[n] = '\0';
 		time_secs = parse_hhmmss(slash + 1);
@@ -233,6 +266,7 @@ static int64_t rule_to_unix(int year, const char *rule, int32_t offset_before)
 	if (date_part[0] == 'J')
 	{
 		int n = atoi(date_part + 1);
+
 		if (n < 1 || n > 365)
 			return 0;
 		if (is_leap(year) && n >= 60)
@@ -252,6 +286,7 @@ static int64_t rule_to_unix(int year, const char *rule, int32_t offset_before)
 	}
 
 	local_secs = days_from_civil(year, 1, 1) * 86400 + (int64_t)doy * 86400 + time_secs;
+
 	return local_secs - (int64_t)offset_before;
 }
 
@@ -268,17 +303,21 @@ static int posix_offset_at(const char *tz, int64_t unix_sec, int32_t *out)
 		return -1;
 
 	after_abbr = skip_posix_abbr(tz);
+
 	if (!after_abbr || parse_posix_offset(after_abbr, &std_off, &after_off) != 0)
 		return -1;
 
 	std_len = (size_t)(after_off - tz);
+
 	if (std_len >= sizeof(std_buf))
 		std_len = sizeof(std_buf) - 1;
+
 	memcpy(std_buf, tz, std_len);
 	std_buf[std_len] = '\0';
 	(void)std_buf;
 
 	rest = after_off;
+
 	if (!rest || !*rest)
 	{
 		*out = std_off;
@@ -286,6 +325,7 @@ static int posix_offset_at(const char *tz, int64_t unix_sec, int32_t *out)
 	}
 
 	after_abbr = skip_posix_abbr(rest);
+
 	if (!after_abbr)
 		return -1;
 
@@ -322,19 +362,24 @@ static int posix_offset_at(const char *tz, int64_t unix_sec, int32_t *out)
 		strncpy(rules, rest + 1, sizeof(rules) - 1);
 		rules[sizeof(rules) - 1] = '\0';
 		comma = strchr(rules, ',');
+
 		if (!comma)
 			return -1;
+
 		*comma = '\0';
 		start_rule = rules;
 		end_rule = comma + 1;
 		year = civil_year_from_unix(unix_sec);
 		start_utc = rule_to_unix(year, start_rule, std_off);
 		end_utc = rule_to_unix(year, end_rule, dst_off);
+
 		if (start_utc < end_utc)
 			in_dst = unix_sec >= start_utc && unix_sec < end_utc;
 		else
 			in_dst = unix_sec >= start_utc || unix_sec < end_utc;
+
 		*out = in_dst ? dst_off : std_off;
+
 		return 0;
 	}
 }
@@ -348,11 +393,14 @@ static int parse_tzif(const unsigned char *data, size_t len, jx_tzdb *db)
 	unsigned char version;
 
 	memset(db, 0, sizeof(*db));
+
 	if (len < 44 || memcmp(data, "TZif", 4) != 0)
 		return -1;
+
 	version = data[4];
 
 	off = 20;
+
 	if (read_i32_be(data, len, &off, &ttisutcnt) || read_i32_be(data, len, &off, &ttisstdcnt) ||
 		read_i32_be(data, len, &off, &leapcnt) || read_i32_be(data, len, &off, &timecnt) ||
 		read_i32_be(data, len, &off, &typecnt) || read_i32_be(data, len, &off, &charcnt))
@@ -369,41 +417,55 @@ static int parse_tzif(const unsigned char *data, size_t len, jx_tzdb *db)
 
 	if (version == 0)
 	{
-		// v1 only — re-read 32-bit body
+		// v1 only - re-read 32-bit body
 		off = 44;
+
 		if (timecnt > JX_TZ_MAX_TRANS || typecnt > JX_TZ_MAX_TYPES || typecnt < 1)
 			return -1;
+
 		db->timecnt = timecnt;
 		db->typecnt = typecnt;
+
 		for (i = 0; i < timecnt; i++)
 		{
 			int32_t t;
+
 			if (read_i32_be(data, len, &off, &t))
 				return -1;
+
 			db->transitions[i] = t;
 		}
+
 		for (i = 0; i < timecnt; i++)
 		{
 			if (off >= len)
 				return -1;
+
 			db->trans_types[i] = data[off++];
 		}
+
 		for (i = 0; i < typecnt; i++)
 		{
 			int32_t utoff;
+
 			if (read_i32_be(data, len, &off, &utoff))
 				return -1;
+
 			if (off + 2 > len)
 				return -1;
+
 			off += 2; // isdst + abbrind
 			db->types[i].utoff = utoff;
 		}
+
 		return 0;
 	}
 
 	if (off + 44 > len || memcmp(data + off, "TZif", 4) != 0)
 		return -1;
+
 	off += 20;
+
 	if (read_i32_be(data, len, &off, &ttisutcnt2) || read_i32_be(data, len, &off, &ttisstdcnt2) ||
 		read_i32_be(data, len, &off, &leapcnt2) || read_i32_be(data, len, &off, &timecnt2) ||
 		read_i32_be(data, len, &off, &typecnt2) || read_i32_be(data, len, &off, &charcnt2))
@@ -411,6 +473,7 @@ static int parse_tzif(const unsigned char *data, size_t len, jx_tzdb *db)
 
 	if (timecnt2 > JX_TZ_MAX_TRANS || typecnt2 > JX_TZ_MAX_TYPES || typecnt2 < 1)
 		return -1;
+
 	db->timecnt = timecnt2;
 	db->typecnt = typecnt2;
 
@@ -419,22 +482,28 @@ static int parse_tzif(const unsigned char *data, size_t len, jx_tzdb *db)
 		if (read_i64_be(data, len, &off, &db->transitions[i]))
 			return -1;
 	}
+
 	for (i = 0; i < timecnt2; i++)
 	{
 		if (off >= len)
 			return -1;
 		db->trans_types[i] = data[off++];
 	}
+
 	for (i = 0; i < typecnt2; i++)
 	{
 		int32_t utoff;
+
 		if (read_i32_be(data, len, &off, &utoff))
 			return -1;
+
 		if (off + 2 > len)
 			return -1;
+
 		off += 2;
 		db->types[i].utoff = utoff;
 	}
+
 	off += (size_t)charcnt2;
 	off += (size_t)leapcnt2 * 12;
 	off += (size_t)ttisstdcnt2;
@@ -445,23 +514,30 @@ static int parse_tzif(const unsigned char *data, size_t len, jx_tzdb *db)
 		const unsigned char *rest = data + off;
 		size_t rem = len - off;
 		size_t a, b;
+
 		for (a = 0; a < rem && rest[a] != '\n'; a++)
 			;
+
 		if (a < rem)
 		{
 			a++;
+
 			for (b = a; b < rem && rest[b] != '\n'; b++)
 				;
+
 			if (b > a)
 			{
 				size_t n = b - a;
+
 				if (n >= sizeof(db->posix))
 					n = sizeof(db->posix) - 1;
+
 				memcpy(db->posix, rest + a, n);
 				db->posix[n] = '\0';
 			}
 		}
 	}
+
 	return 0;
 }
 
@@ -473,21 +549,26 @@ static int32_t db_offset_at(const jx_tzdb *db, int64_t unix_sec)
 
 	if (db->typecnt < 1)
 		return 0;
+
 	if (db->timecnt == 0)
 		return db->types[0].utoff;
+
 	if (unix_sec < db->transitions[0])
 		return db->types[0].utoff;
 
 	lo = 0;
 	hi = db->timecnt;
+
 	while (lo < hi)
 	{
 		mid = (lo + hi) / 2;
+
 		if (db->transitions[mid] <= unix_sec)
 			lo = mid + 1;
 		else
 			hi = mid;
 	}
+
 	idx = lo - 1;
 
 	if (idx + 1 == db->timecnt && db->posix[0] &&
@@ -495,8 +576,10 @@ static int32_t db_offset_at(const jx_tzdb *db, int64_t unix_sec)
 		return posix_off;
 
 	ti = db->trans_types[idx];
+
 	if (ti < 0 || ti >= db->typecnt)
 		return db->types[0].utoff;
+
 	return db->types[ti].utoff;
 }
 
@@ -515,19 +598,23 @@ static int load_bytes(const char *iana_id, unsigned char **out_buf, size_t *out_
 #ifndef _WIN32
 	snprintf(path, sizeof(path), "/usr/share/zoneinfo/%s", iana_id);
 	f = fopen(path, "rb");
+
 	if (!f)
 	{
 		snprintf(path, sizeof(path), "/var/db/timezone/zoneinfo/%s", iana_id);
 		f = fopen(path, "rb");
 	}
+
 	if (f)
 	{
 		if (fseek(f, 0, SEEK_END) == 0)
 		{
 			sz = ftell(f);
+
 			if (sz > 0 && fseek(f, 0, SEEK_SET) == 0)
 			{
 				buf = (unsigned char *)malloc((size_t)sz);
+
 				if (buf && fread(buf, 1, (size_t)sz, f) == (size_t)sz && sz >= 4 &&
 					memcmp(buf, "TZif", 4) == 0)
 				{
@@ -537,9 +624,11 @@ static int load_bytes(const char *iana_id, unsigned char **out_buf, size_t *out_
 					*owned = 1;
 					return 0;
 				}
+
 				free(buf);
 			}
 		}
+
 		fclose(f);
 	}
 #endif
@@ -554,6 +643,7 @@ static int load_bytes(const char *iana_id, unsigned char **out_buf, size_t *out_
 			return 0;
 		}
 	}
+
 	for (e = jx_tz_embedded; e->id; e++)
 	{
 		if (strcasecmp(e->id, iana_id) == 0)
@@ -564,6 +654,7 @@ static int load_bytes(const char *iana_id, unsigned char **out_buf, size_t *out_
 			return 0;
 		}
 	}
+
 	return -1;
 }
 
@@ -574,10 +665,13 @@ static void canonicalize_id(const char *id, char *out, size_t out_len)
 	size_t i, n;
 
 	n = strlen(id);
+
 	if (n >= sizeof(lower))
 		n = sizeof(lower) - 1;
+
 	for (i = 0; i < n; i++)
 		lower[i] = (char)tolower((unsigned char)id[i]);
+
 	lower[n] = '\0';
 
 	if (strcmp(lower, "utc") == 0 || strcmp(lower, "gmt") == 0)
@@ -585,11 +679,13 @@ static void canonicalize_id(const char *id, char *out, size_t out_len)
 		snprintf(out, out_len, "UTC");
 		return;
 	}
+
 	if (strcmp(lower, "etc/utc") == 0)
 	{
 		snprintf(out, out_len, "Etc/UTC");
 		return;
 	}
+
 	for (e = jx_tz_embedded; e->id; e++)
 	{
 		if (strcasecmp(e->id, id) == 0)
@@ -598,14 +694,17 @@ static void canonicalize_id(const char *id, char *out, size_t out_len)
 			return;
 		}
 	}
+
 	// Title-case segments
 	{
 		char tmp[JX_TZ_ID_MAX];
 		size_t j = 0;
 		int cap = 1;
+
 		for (i = 0; id[i] && j + 1 < sizeof(tmp); i++)
 		{
 			char c = id[i];
+
 			if (c == '/')
 			{
 				tmp[j++] = c;
@@ -623,6 +722,7 @@ static void canonicalize_id(const char *id, char *out, size_t out_len)
 					cap = 1;
 			}
 		}
+
 		tmp[j] = '\0';
 		snprintf(out, out_len, "%s", tmp);
 	}
@@ -633,10 +733,12 @@ static int zone_loadable(const char *id)
 	unsigned char *buf;
 	size_t len;
 	int owned;
+
 	if (load_bytes(id, &buf, &len, &owned) != 0)
 		return 0;
 	if (owned)
 		free(buf);
+
 	return 1;
 }
 
@@ -652,6 +754,7 @@ const char *jx_tz_detect_host(void)
 		return g_host_tz;
 
 	tz = getenv("TZ");
+
 	if (tz && tz[0])
 	{
 		if (tz[0] == ':')
@@ -660,16 +763,20 @@ const char *jx_tz_detect_host(void)
 			if (p)
 			{
 				p += 9;
+
 				if (*p == '/')
 					p++;
+
 				canonicalize_id(p, g_host_tz, sizeof(g_host_tz));
 				g_host_tz_ready = 1;
+
 				return g_host_tz;
 			}
 		}
 		else if (strchr(tz, '/') && !strchr(tz, '<'))
 		{
 			canonicalize_id(tz, g_host_tz, sizeof(g_host_tz));
+
 			if (zone_loadable(g_host_tz))
 			{
 				g_host_tz_ready = 1;
@@ -681,18 +788,23 @@ const char *jx_tz_detect_host(void)
 #ifndef _WIN32
 	{
 		ssize_t n = readlink("/etc/localtime", link, sizeof(link) - 1);
+
 		if (n > 0)
 		{
 			const char *p;
 			link[n] = '\0';
 			p = strstr(link, "zoneinfo/");
+
 			if (p)
 			{
 				p += 9;
+
 				if (*p == '/')
 					p++;
+
 				canonicalize_id(p, g_host_tz, sizeof(g_host_tz));
 				g_host_tz_ready = 1;
+
 				return g_host_tz;
 			}
 		}
@@ -701,6 +813,7 @@ const char *jx_tz_detect_host(void)
 
 	snprintf(g_host_tz, sizeof(g_host_tz), "UTC");
 	g_host_tz_ready = 1;
+
 	return g_host_tz;
 }
 
@@ -721,14 +834,18 @@ int jx_tz_resolve(const char *input, const char *current, char *out, size_t out_
 
 	while (*input && isspace((unsigned char)*input))
 		input++;
+
 	if (!*input)
 		return -1;
 
 	n = strlen(input);
+
 	if (n >= sizeof(lower))
 		n = sizeof(lower) - 1;
+
 	for (i = 0; i < n; i++)
 		lower[i] = (char)tolower((unsigned char)input[i]);
+
 	lower[n] = '\0';
 
 	if (strcmp(lower, "default") == 0 || strcmp(lower, "local") == 0 ||
@@ -737,6 +854,7 @@ int jx_tz_resolve(const char *input, const char *current, char *out, size_t out_
 		snprintf(out, out_len, "%s", jx_tz_detect_host());
 		return 0;
 	}
+
 	if (strcmp(lower, "utc") == 0 || strcmp(lower, "gmt") == 0)
 	{
 		snprintf(out, out_len, "UTC");
@@ -744,11 +862,13 @@ int jx_tz_resolve(const char *input, const char *current, char *out, size_t out_
 	}
 
 	canonicalize_id(input, canon, sizeof(canon));
+
 	if (strcmp(canon, "UTC") == 0 || zone_loadable(canon) || zone_loadable(input))
 	{
 		snprintf(out, out_len, "%s", canon);
 		return 0;
 	}
+
 	return -1;
 }
 
@@ -762,42 +882,54 @@ int jx_tz_offset_seconds(const char *iana_id, int64_t unix_ms, int32_t *out_offs
 
 	if (!iana_id || !out_offset)
 		return -1;
+
 	if (strcmp(iana_id, "UTC") == 0 || strcasecmp(iana_id, "gmt") == 0)
 	{
 		*out_offset = 0;
 		return 0;
 	}
+
 	if (load_bytes(iana_id, &buf, &len, &owned) != 0)
 		return -1;
+
 	if (parse_tzif(buf, len, &db) != 0)
 	{
 		if (owned)
 			free(buf);
 		return -1;
 	}
+
 	if (owned)
 		free(buf);
 
 	unix_sec = unix_ms >= 0 ? unix_ms / 1000 : (unix_ms - 999) / 1000;
+
 	// floor toward -inf for negative
 	if (unix_ms < 0)
 	{
 		unix_sec = unix_ms / 1000;
+
 		if (unix_ms % 1000 != 0)
 			unix_sec -= 1;
 	}
+
 	*out_offset = db_offset_at(&db, unix_sec);
+
 	return 0;
 }
 
 int jx_tz_utc_to_wall_ms(const char *iana_id, int64_t unix_ms, int64_t *out_wall)
 {
 	int32_t off;
+
 	if (!out_wall)
 		return -1;
+
 	if (jx_tz_offset_seconds(iana_id, unix_ms, &off) != 0)
 		return -1;
+
 	*out_wall = unix_ms + (int64_t)off * 1000;
+
 	return 0;
 }
 
@@ -811,27 +943,36 @@ int jx_tz_wall_to_utc_ms(const char *iana_id, int y, int m, int d, int h, int mi
 
 	if (!out_utc)
 		return -1;
-	wall_as_utc = days_from_civil(y, m, d) * 86400000LL +
-				  (int64_t)(h * 3600 + mi * 60 + s) * 1000 + ms;
+
+	wall_as_utc = days_from_civil(y, m, d) * 86400000LL + (int64_t)(h * 3600 + mi * 60 + s) * 1000 + ms;
+
 	if (!iana_id || strcmp(iana_id, "UTC") == 0)
 	{
 		*out_utc = wall_as_utc;
 		return 0;
 	}
+
 	utc = wall_as_utc;
+
 	for (i = 0; i < 4; i++)
 	{
 		int64_t next;
+
 		if (jx_tz_offset_seconds(iana_id, utc, &off) != 0)
 			return -1;
+
 		next = wall_as_utc - (int64_t)off * 1000;
+
 		if (next == utc)
 		{
 			*out_utc = utc;
 			return 0;
 		}
+
 		utc = next;
 	}
+
 	*out_utc = utc;
+
 	return 0;
 }

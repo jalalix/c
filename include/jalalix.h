@@ -1,5 +1,5 @@
 /**
- * JalaliX — Jalali (Persian / Shamsi) calendar library
+ * JalaliX - Jalali (Persian / Shamsi) calendar library
  * Pure C99, standard library only.
  *
  * Copyright (c) Hossein Maklavani
@@ -49,12 +49,23 @@ extern "C"
 
     /**
      * Parses a Jalali date string into a JalaliX instance.
-     * Accepts `YYYY/MM/DD` or `YYYY-MM-DD`, optional time (`HH:mm` / `HH:mm:ss`),
-     * and Persian digits (e.g. "۱۴۰۳-۱۲-۰۷ 14:30").
+     * Accepts `YYYY/MM/DD`, `YYYY-MM-DD`, or `YYYY.MM.DD`, optional time (`HH:mm` / `HH:mm:ss`),
+     * and Persian / Arabic-Indic digits (e.g. "۱۴۰۳-۱۲-۰۷ 14:30").
      * @param value Jalali date string.
      * @return New jalalix_t* (caller must jalalix_free), or NULL on failure.
      */
     jalalix_t *jalalix_parse_jalali(const char *value);
+
+    /** Options for jalalix_normalize_query_date / jalalix_normalize_query_timestamp. */
+    typedef struct jalalix_normalize_options
+    {
+        /** IANA timezone (e.g. `"Asia/Tehran"`); NULL leaves default `UTC`. */
+        const char *timezone;
+        /** Jalali year band lower bound; `0` -> default `1`. */
+        int jalali_year_min;
+        /** Jalali year band upper bound; `0` -> default `1899`. */
+        int jalali_year_max;
+    } jalalix_normalize_options;
 
     /**
      * Formats the date according to the specified format string into `out` (NUL-terminated on success).
@@ -295,13 +306,37 @@ extern "C"
     int jalalix_to_persian(const char *in, char *out, size_t out_len);
 
     /**
-     * Converts Persian numerals (۰–۹) to Western numerals (0–9) in a string.
-     * @param in Input string containing Persian numerals.
+     * Converts Persian (۰–۹) and Arabic-Indic (٠–٩) numerals to Western numerals (0–9).
+     * @param in Input string containing Persian or Arabic-Indic numerals.
      * @param out Output buffer.
      * @param out_len Capacity of `out` in bytes (including space for NUL).
      * @return 0 on success, -1 on error.
      */
     int jalalix_from_persian(const char *in, char *out, size_t out_len);
+
+    /**
+     * Normalizes a unix timestamp (seconds or milliseconds) to Gregorian `YYYY-MM-DD HH:mm:ss`.
+     * Values <= 0 are treated as empty/null.
+     * @param timestamp Unix seconds or ms (values > 9999999999 are treated as ms).
+     * @param opts Optional timezone / year-band options; NULL is allowed.
+     * @param out Output buffer.
+     * @param out_len Capacity of `out` in bytes (including space for NUL).
+     * @return `0` on success, `1` for null/empty result, `-1` on error.
+     */
+    int jalalix_normalize_query_timestamp(int64_t timestamp, const jalalix_normalize_options *opts,
+                                          char *out, size_t out_len);
+
+    /**
+     * Soft-normalizes loose query / form date strings to Gregorian `YYYY-MM-DD HH:mm:ss`.
+     * Handles sentinels, numeric unix strings, Jalali vs Gregorian auto-detect by year band.
+     * @param value Query date string; NULL is treated as a sentinel.
+     * @param opts Optional timezone / year-band options; NULL is allowed.
+     * @param out Output buffer.
+     * @param out_len Capacity of `out` in bytes (including space for NUL).
+     * @return `0` on success (normalized or cleaned string in `out`), `1` for sentinel (`out` empty),
+     *         `-1` on error.
+     */
+    int jalalix_normalize_query_date(const char *value, const jalalix_normalize_options *opts, char *out, size_t out_len);
 
     /**
      * Compares two JalaliX dates (matches TypeScript JalaliX.compare).
